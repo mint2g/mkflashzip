@@ -13,7 +13,7 @@ DEVICE_CODE=mint2g
 DEVICE_API=19
 
 # For testing script w/o flashing set to 1
-KF_TEST=1
+KF_TEST=0
 
 
 OUTFD=$2
@@ -119,11 +119,11 @@ fi
 
 
 API=$(cat /system/build.prop | grep "ro.build.version.sdk=" | dd bs=1 skip=21 count=2) 
-CM_DEVICE=$(cat /system/build.prop | grep "ro.cm.device=" | dd bs=1 skip=13 count="${# DEVICE_CODE}" )
+CM_DEVICE=$(cat /system/build.prop | grep "ro.cm.device=" | dd bs=1 skip=13 count="${#DEVICE_CODE}" )
 
 debug_log "api= $API , device= $CM_DEVICE" 
 
-  if [ "$CM_DEVICE" -ne "$DEVICE_CODE" ]; then
+  if [ "$CM_DEVICE" != "$DEVICE_CODE" ]; then
     ui_print "This kernel is only for $DEVICE_CODE "
     exit 1
   fi
@@ -133,7 +133,7 @@ debug_log "api= $API , device= $CM_DEVICE"
     exit 1
   fi
 
-#create some for testing
+# create stub dirs for testing
 if [ "$KF_TEST" -eq "1" ]; then
 SD_PATH=/tmp/sdcard
 SYSTEM_DIR=/tmp/system
@@ -141,10 +141,10 @@ mkdir "$SD_PATH"
 mkdir "$SYSTEM_DIR"
 mkdir "$SYSTEM_DIR/modules"
 cp -R /system/lib/modules "$SYSTEM_DIR/modules"
-mkdir "$SYSTEM_DIR/init.d"
+
 # just to be sure
 BOOT_PART=/dev/null
-fi
+fi;
 
 if [ -z "$BIN" ]; then
   ui_print "- Extracting files"
@@ -159,23 +159,22 @@ if [ -z "$BIN" ]; then
   
   BOOT_IMG=/tmp/kinstall/boot.img
   MODULE_DIR=/tmp/kinstall/modules
-  INITD_DIR=/tmp/kinstall/init.d
-  ZIPC_DIR=/tmp/kinstall/ziprevert
+  ZREV_DIR=/tmp/kinstall/ziprevert
    
 fi
 
 ui_print "- Backing up old kernel"
 if [ "$KF_TEST" -eq "1" ]; then
-dd bs=4M count=2 if=/dev/urandom of="$ZIPC_DIR/boot.img"
-cp -R /system/lib/modules "$ZIPC_DIR/modules"
+dd bs=4M count=2 if=/dev/urandom of="$ZREV_DIR/boot.img"
+cp -R /system/lib/modules "$ZREV_DIR/modules"
 else
-dd bs=4M if="$BOOT_PART" of="$ZIPC_DIR/boot.img"
-mv "$SYSTEM_DIR/modules"  "$ZIPC_DIR/modules"
+dd bs=4M if="$BOOT_PART" of="$ZREV_DIR/boot.img"
+mv "$SYSTEM_DIR/modules"  "$ZREV_DIR/modules"
 fi;
 
 ui_print "- Creating auto revert zip. " 
-cd "$ZIPC_DIR" || exit
-p7zip a "../cm11_old_kernel.zip" ./*
+cd "$ZREV_DIR" || exit
+p7zip a "../old_kernel.zip" ./*
 cp "/tmp/kinstall/old_kernel.zip" "$SD_PATH/"
 ui_print "- Saved to $SD_PATH"
 
