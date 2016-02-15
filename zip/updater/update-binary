@@ -13,7 +13,8 @@ DEVICE_CODE=mint2g
 DEVICE_API=19
 
 # For testing script w/o flashing set to 1
-KF_TEST=0
+KF_TEST=1
+set -x
 
 
 OUTFD=$2
@@ -169,7 +170,7 @@ dd bs=4M count=2 if=/dev/urandom of="$ZREV_DIR/boot.img"
 cp -R /system/lib/modules "$ZREV_DIR/modules"
 else
 dd bs=4M if="$BOOT_PART" of="$ZREV_DIR/boot.img"
-mv "$SYSTEM_DIR/modules"  "$ZREV_DIR/modules"
+mv "$SYSTEM_DIR/lib/modules"  "$ZREV_DIR/modules"
 fi;
 
 ui_print "- Creating auto revert zip. " 
@@ -179,11 +180,11 @@ cp "/tmp/kinstall/old_kernel.zip" "$SD_PATH/"
 ui_print "- Saved to $SD_PATH"
 
 ui_print "- Copying new modules"
-mv "$MODULE_DIR" "$SYSTEM_DIR/modules"
+mv "$MODULE_DIR" "$SYSTEM_DIR/lib/modules"
 
 ui_print "- Setting permissions"
-set_perm 0 0 0755  "$SYSTEM_DIR/modules" 
-for kmodule in "$SYSTEM_DIR/modules/"* ; do
+set_perm 0 0 0755  "$SYSTEM_DIR/lib/modules"
+for kmodule in "$SYSTEM_DIR/lib/modules/"* ; do
 set_perm 0 0 0644 "$kmodule"
 done;
 
