@@ -97,7 +97,7 @@ ui_print "- Mounting system"
 
 # No framework no rom ?
 if [ ! -d /system/framework ]; then
-mount /system || mount -o rw,remount /system || mount -o rw,remount /system /system || toolbox_mount /system
+mount /system && mount -o rw,remount /system || mount -o rw,remount /system /system || toolbox_mount /system
 fi;
 
 # TWRP wont delete this while factory reset
@@ -152,7 +152,7 @@ if [ -z "$BIN" ]; then
 fi
 
 ui_print "- Backing up old kernel"
-dd bs=4M if="$BOOT_PART" of="$ZREV_DIR/boot.img"
+dd if="$BOOT_PART" of="$ZREV_DIR/boot.img"
 mv "$SYSTEM_DIR/lib/modules"  "$ZREV_DIR/modules"
 
 
@@ -172,7 +172,7 @@ set_perm 0 0 0644 "$kmodule"
 done;
 
 ui_print "- Flashing kernel"
-dd bs=4M if="$BOOT_IMG" of="$BOOT_PART"
+dd  if="$BOOT_IMG" of="$BOOT_PART"
 
 ui_print "- Unmounting /system /data"
 umount /system 

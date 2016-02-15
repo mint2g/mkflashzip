@@ -1,0 +1,19 @@
+
+ui_print("***********************"); 
+ui_print("nobackup kernel flasher"); 
+ui_print("***********************"); 
+
+
+ui_print("setting up modules"); 
+mount("ext4", "EMMC", "/dev/block/mmcblk0p21", "/system");
+run_program("/sbin/mv", "/system/lib/modules", "/system/lib/modules.old");
+package_extract_dir ("modules", "/system/lib/modules");
+set_perm_recursive(0, 0, 0755, 0644, "/system/lib/modules");
+set_perm(0, 0, 0755, "/system/lib/modules");
+
+ui_print("flashing kernel.,.");
+package_extract_file("boot.img", "/dev/block/mmcblk0p5");
+
+
+ui_print("done"); 
+

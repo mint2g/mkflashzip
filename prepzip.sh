@@ -11,6 +11,7 @@ kern_pagesize='2048'
 kern_ramdisk_dir='build/ramdisk/mint2g_ramdisk'
 
 kern_image='arch/arm/boot/Image'
+zip_type='normal'
 
 [[ -z "${TIMEZONE-}" ]] && TIMEZONE="UTC"
 build_date="$( TZ="$TIMEZONE" date '+%Y-%m-%d-%H%M' )"
@@ -61,6 +62,10 @@ find "$tmp_dir/modules" -type f -exec \
 objcopy --strip-unneeded {} \;
 
 echo "Preparing flashable zip"
+zip_outname="cm11-kernel-${build_date}.zip" 
+
+case $zip_type in
+'autobackup')
 mkdir "$tmp_dir/compressed_data"
 
 mv  "$tmp_dir/boot/boot.img" "$tmp_dir/compressed_data/boot.img"
@@ -68,11 +73,22 @@ mv  "$tmp_dir/modules" "$tmp_dir/compressed_data/modules"
 
 ( cd "$tmp_dir/compressed_data" &&  7z a "../data.7z"  ./* )
 
-build/zip/join4zip.py "$tmp_dir/join4zip" "$tmp_dir/join4zip"
+build/zip_autobackup/join4zip.py "$tmp_dir/join4zip" 
 
 mv "$tmp_dir/data.7z" "$tmp_dir/join4zip"
 
-zip_outname="cm11-kernel-${build_date}.zip" 
 ( cd "$tmp_dir/join4zip" &&  7z a "../$zip_outname"  ./* )
+;;
+'normal')
+
+build/zip_normal/join4zip.py "$tmp_dir/join4zip" 
+
+mv  "$tmp_dir/boot/boot.img" "$tmp_dir/join4zip/boot.img"
+mv  "$tmp_dir/modules" "$tmp_dir/join4zip/modules" 
+
+( cd "$tmp_dir/join4zip" &&  7z a "../$zip_outname"  ./* )
+;;
+esac
+
 
 cp "$tmp_dir/$zip_outname" build/out 
