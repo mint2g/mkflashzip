@@ -1,0 +1,203 @@
+#!/sbin/sh
+# kernel backup *not yet* and flasher
+# hack3d up by psych.half
+#
+# based on SuperSU installer ZIP
+# Copyright (c) 2012-2015 - Chainfire
+#
+
+BOOT_PART=/dev/block/mmcblk0p5
+SD_PATH=/data/media/0
+SYSTEM_DIR=/system
+DEVICE_CODE=mint2g
+DEVICE_API=19
+
+# For testing script w/o flashing set to 1
+KF_TEST=1
+
+
+OUTFD=$2
+ZIP=$3
+
+debug_log() {
+# this should go in recovery.log, at least in TWRP
+echo "debug: $@"
+}
+
+ui_print() {
+  echo -n -e "ui_print $1\n" > /proc/self/fd/$OUTFD
+  echo -n -e "ui_print\n" > /proc/self/fd/$OUTFD
+}
+
+
+set_perm() {
+  chown $1.$2 $4
+  chown $1:$2 $4
+  chmod $3 $4
+}
+
+cp_perm() {
+  rm $5
+  if [ -f "$4" ]; then
+    cat $4 > $5
+    set_perm $1 $2 $3 $5 $6
+  fi
+}
+
+toolbox_mount() {
+  DEV=
+  POINT=
+  FS=
+  for i in $(cat /etc/fstab | grep "$1"); do
+    if [ -z "$DEV" ]; then
+      DEV=$i
+    elif [ -z "$POINT" ]; then
+      POINT=$i
+    elif [ -z "$FS" ]; then
+      FS=$i
+      break
+    fi
+  done
+  mount -t $FS -o rw $DEV $POINT
+  mount -t $FS -o rw,remount $DEV $POINT
+
+  DEV=
+  POINT=
+  FS=
+  for i in $(cat /etc/recovery.fstab | grep "$1"); do
+    if [ -z "$POINT" ]; then
+      POINT=$i
+    elif [ -z "$FS" ]; then
+      FS=$i
+    elif [ -z "$DEV" ]; then
+      DEV=$i
+      break
+    fi
+  done
+  if [ "$FS" = "emmc" ]; then
+    mount -t ext4 -o rw $DEV $POINT
+    mount -t ext4 -o rw,remount $DEV $POINT
+    mount -t f2fs -o rw $DEV $POINT
+    mount -t f2fs -o rw,remount $DEV $POINT
+  else
+    mount -t $FS -o rw $DEV $POINT
+    mount -t $FS -o rw,remount $DEV $POINT
+  fi
+}
+
+p7zip () {
+/tmp/kinstall/7za "$@"
+}
+
+ui_print "*****************"
+ui_print "kernel flasher "
+ui_print "*****************"
+
+ui_print "- Mounting system"
+
+# No framework no rom ?
+if [ ! -d /system/framework ]; then
+mount /system || mount -o rw,remount /system || mount -o rw,remount /system /system || toolbox_mount /system
+fi;
+
+# TWRP wont delete this while factory reset
+if [ ! -d /data/media ]; then
+mount data || toolbox_mount /data
+fi
+
+mount -o rw,remount /
+mount -o rw,remount / /
+
+
+if [ -z "$BIN" ]; then
+  # TWRP went full retard
+  if [ ! -f "/sbin/unzip" ]; then
+    ui_print "- BAD RECOVERY DETECTED, NO UNZIP, ABORTING"
+    exit 1
+  fi
+fi
+
+
+API=$(cat /system/build.prop | grep "ro.build.version.sdk=" | dd bs=1 skip=21 count=2) 
+CM_DEVICE=$(cat /system/build.prop | grep "ro.cm.device=" | dd bs=1 skip=13 count="${# DEVICE_CODE}" )
+
+debug_log "api= $API , device= $CM_DEVICE" 
+
+  if [ "$CM_DEVICE" -ne "$DEVICE_CODE" ]; then
+    ui_print "This kernel is only for $DEVICE_CODE "
+    exit 1
+  fi
+
+  if [ "$API" -ne "$DEVICE_API" ]; then
+    ui_print "This kernel is only supported on CM11."
+    exit 1
+  fi
+
+#create some for testing
+if [ "$KF_TEST" -eq "1" ]; then
+SD_PATH=/tmp/sdcard
+SYSTEM_DIR=/tmp/system
+mkdir "$SD_PATH"
+mkdir "$SYSTEM_DIR"
+mkdir "$SYSTEM_DIR/modules"
+cp -R /system/lib/modules "$SYSTEM_DIR/modules"
+mkdir "$SYSTEM_DIR/init.d"
+# just to be sure
+BOOT_PART=/dev/null
+fi
+
+if [ -z "$BIN" ]; then
+  ui_print "- Extracting files"
+
+  mkdir /tmp/kinstall
+  cd /tmp/kinstall || exit
+
+  unzip -o "$ZIP"
+  set_perm 0 0 0755 /tmp/kinstall/7za
+  
+  p7zip x data.7z
+  
+  BOOT_IMG=/tmp/kinstall/boot.img
+  MODULE_DIR=/tmp/kinstall/modules
+  INITD_DIR=/tmp/kinstall/init.d
+  ZIPC_DIR=/tmp/kinstall/ziprevert
+   
+fi
+
+ui_print "- Backing up old kernel"
+if [ "$KF_TEST" -eq "1" ]; then
+dd bs=4M count=2 if=/dev/urandom of="$ZIPC_DIR/boot.img"
+cp -R /system/lib/modules "$ZIPC_DIR/modules"
+else
+dd bs=4M if="$BOOT_PART" of="$ZIPC_DIR/boot.img"
+mv "$SYSTEM_DIR/modules"  "$ZIPC_DIR/modules"
+fi;
+
+ui_print "- Creating auto revert zip. " 
+cd "$ZIPC_DIR" || exit
+p7zip a "../cm11_old_kernel.zip" ./*
+cp "/tmp/kinstall/old_kernel.zip" "$SD_PATH/"
+ui_print "- Saved to $SD_PATH"
+
+ui_print "- Copying new modules"
+mv "$MODULE_DIR" "$SYSTEM_DIR/modules"
+
+ui_print "- Setting permissions"
+set_perm 0 0 0755  "$SYSTEM_DIR/modules" 
+for kmodule in "$SYSTEM_DIR/modules/"* ; do
+set_perm 0 0 0644 "$kmodule"
+done;
+
+ui_print "- Flashing kernel"
+if [ "$KF_TEST" -eq "1" ]; then
+dd bs=4M if="$BOOT_IMG" of=/dev/null
+else
+dd bs=4M if="$BOOT_IMG" of="$BOOT_PART"
+fi
+
+ui_print "- Unmounting /system /data"
+umount /system 
+umount /data
+
+ui_print "- Done !"
+exit 0

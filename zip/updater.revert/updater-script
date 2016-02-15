@@ -1,0 +1,15 @@
+
+ui_print("Restoring previous libs"); 
+
+mount("ext4", "EMMC", "/dev/block/mmcblk0p21", "/system");
+package_extract_dir ("modules", "/system/lib/modules");
+set_perm_recursive(0, 0, 0755, 0644, "/system/lib/modules");
+set_perm(0, 0, 0755, "/system/lib/modules");
+
+ui_print("Restoring the kernel");
+package_extract_file("boot.img", "/dev/block/mmcblk0p5");
+
+ui_print("You might need to reflash ROM ");
+ui_print("incase this fails. ");
+
+
