@@ -5,6 +5,8 @@ set -eu -o pipefail
 # Requires bootimg tools and p7zip in path
 # Exec from kernel dir 
 
+[[ ${1-} == '--debug' ]] && set -x && shift
+
 kern_cmdline='console=ttyS1,115200n8 androidboot.selinux=permissive' 
 kern_base='0x00000000'
 kern_pagesize='2048' 
