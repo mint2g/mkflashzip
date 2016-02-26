@@ -2,7 +2,7 @@
 
 set -eu -o pipefail
 
-# Requires bootimg tools and p7zip in path
+# Requires bootimgtools, mkbootfs and p7zip in path
 # Should be in kernel_dir/build
 # Exec from kernel_dir
 # TODO: default zip is debug unless -r <version> is specified
@@ -64,9 +64,9 @@ mkdir "$tmp_dir/modules"
 if [[ ${USE_ARCHIVED_RAMDISK-} != 1 ]];then
 echo "Generating ramdisk,. "
 
-tar -cC "./$BOOTIMG_RAMDISK_DIR" \
+tar -cpC "./$BOOTIMG_RAMDISK_DIR" \
 '--exclude=.git' '--exclude=.gendirs' './' \
-| tar -xC "$tmp_dir/boot/genramdisk"
+| tar -xpC "$tmp_dir/boot/genramdisk"
 
 while IFS='' read -r line || [[ -n "$line" ]]; do
 [[ ! -d "$tmp_dir/boot/genramdisk/${line}" ]] && mkdir "$tmp_dir/boot/genramdisk/${line}"
@@ -74,8 +74,7 @@ done < "$BOOTIMG_RAMDISK_DIR/.gendirs"
 
 BOOTIMG_RAMDISK="$tmp_dir/boot/ramdisk.cpio.gz"
 
-( cd "$tmp_dir/boot/genramdisk" ; \
-find . | cpio -o -H newc | gzip ) > "$BOOTIMG_RAMDISK"
+mkbootfs "$tmp_dir/boot/genramdisk" | gzip  > "$BOOTIMG_RAMDISK"
 
 else
 BOOTIMG_RAMDISK="$BOOTIMG_RAMDISK_ARCHIVE"
