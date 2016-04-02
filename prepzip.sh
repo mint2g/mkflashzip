@@ -32,14 +32,14 @@ BOOTIMG_ARGS=(
 
 
 
-[[ ! -e 'build/prepzip.sh' ]] && echo "Script called from the wrong dir." && exit -1
+[[ ! -e 'build/prepzip.sh' ]] && echo "Script should be called from the kernel dir." && exit 1
 
 
 [[ -z "${TIMEZONE-}" ]] && TIMEZONE="UTC"
 packaged_date="$( TZ="$TIMEZONE" date '+%Y-%m-%d-%H%M' )"
 
 
-
+archive_kernel_image() {
 # Archive the kernel image
 # TODO: check if dir exisits
 is_archived=0
@@ -49,21 +49,26 @@ is_archived=1
 break;
 fi;
 done
-
 if [[ $is_archived == 0 ]]; then
 echo "Archiving kernel image"
 cp "$BOOTIMG_KERNEL" "build/archive/Image.${packaged_date}"
 fi;
+}
 
-
+setup_workspace() {
 tmp_dir="$(mktemp -d )"
 mkdir "$tmp_dir/boot"
 mkdir "$tmp_dir/boot/genramdisk"
 mkdir "$tmp_dir/modules"
+}
 
-if [[ ${USE_ARCHIVED_RAMDISK-} != 1 ]];then
-echo "Generating ramdisk,. "
 
+generate_ramdisk() {
+if [[ ${USE_ARCHIVED_RAMDISK-} == 1 ]];then
+BOOTIMG_RAMDISK="$BOOTIMG_RAMDISK_ARCHIVE"
+
+else
+echo "Generating ramdisk... " 
 tar -cpC "./$BOOTIMG_RAMDISK_DIR" \
 '--exclude=.git' '--exclude=.gendirs' './' \
 | tar -xpC "$tmp_dir/boot/genramdisk"
@@ -76,10 +81,11 @@ BOOTIMG_RAMDISK="$tmp_dir/boot/ramdisk.cpio.gz"
 
 mkbootfs "$tmp_dir/boot/genramdisk" | gzip  > "$BOOTIMG_RAMDISK"
 
-else
-BOOTIMG_RAMDISK="$BOOTIMG_RAMDISK_ARCHIVE"
 fi
+}
 
+
+make_boot_img() {
 echo "Preparing boot image"
      mkbootimg \
      --kernel "$BOOTIMG_KERNEL" \
@@ -88,10 +94,10 @@ echo "Preparing boot image"
      --base "${BOOTIMG_ARGS[1]}" \
      --pagesize "${BOOTIMG_ARGS[2]}" \
      -o "$tmp_dir/boot/boot.img"
+}
 
-echo
 
-
+prepare_modules() {
 echo "Copying new modules"
 
 # Excludes some dirs
@@ -105,13 +111,15 @@ find . \
 echo "Stripping modules"
 find "$tmp_dir/modules" -type f -exec \
 "${CROSS_COMPILE-}objcopy" --strip-unneeded '{}' ';'
+}
 
-echo "Preparing flashable zip"
-ZIP_OUT_FILE="${ZIP_OUT_STR}-${packaged_date}.zip"
+save_zip() {
+cp "$tmp_dir/$ZIP_OUT_FILE" build/out
+}
 
-case $ZIP_TYPE in
+prepare_zip_autobackup() {
 
-'autobackup')
+echo "Preparing autobackup flashable zip"
   mkdir "$tmp_dir/compressed_data"
 
   mv  "$tmp_dir/boot/boot.img" "$tmp_dir/compressed_data/boot.img"
@@ -123,18 +131,38 @@ case $ZIP_TYPE in
   mv "$tmp_dir/data.7z" "$tmp_dir/join4zip"
 
   ( cd "$tmp_dir/join4zip" &&  7z a "../$ZIP_OUT_FILE"  ./* )
-;;
+}
 
-'normal')
+prepare_zip_normal() {
 
+echo "Preparing normal  flashable zip"
   build/zip_normal/join4zip.py "$tmp_dir/join4zip"
 
   mv  "$tmp_dir/boot/boot.img" "$tmp_dir/join4zip/boot.img"
   mv  "$tmp_dir/modules" "$tmp_dir/join4zip/modules"
 
   ( cd "$tmp_dir/join4zip" &&  7z a "../$ZIP_OUT_FILE"  ./* )
+}
+
+ZIP_OUT_FILE="${ZIP_OUT_STR}-${packaged_date}.zip"
+
+setup_workspace
+
+case $ZIP_TYPE in
+
+'autobackup')
+generate_ramdisk
+make_boot_img
+prepare_modules
+prepare_zip_autobackup
+;;
+
+'normal')
+generate_ramdisk
+make_boot_img
+prepare_modules
+prepare_zip_normal
 ;;
 esac
 
-
-cp "$tmp_dir/$ZIP_OUT_FILE" build/out
+save_zip
