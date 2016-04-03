@@ -1,0 +1,28 @@
+
+ui_print("***********************"); 
+ui_print("liverepack kernel flasher"); 
+ui_print("***********************"); 
+
+mount("ext4", "EMMC", "/dev/block/mmcblk0p21", "/system");
+
+ui_print("repacking kernel.,."); 
+package_extract_file("liverepack.sh", "/tmp/liverepack.sh"); 
+package_extract_file("utils/busybox", "/tmp/busybox"); 
+package_extract_file("utils/mkbootimg", "/tmp/mkbootimg");
+package_extract_dir("files", "/tmp/xtracted");
+set_perm(0, 0, 0755, "/tmp/busybox");
+set_perm(0, 0, 0755, "/tmp/mkbootimg");
+set_perm(0, 0, 0755, "/tmp/liverepack.sh");
+
+assert(run_program("/tmp/liverepack.sh") == 0);
+
+ui_print("setting up modules"); 
+run_program("/sbin/mv", "/system/lib/modules", "/system/lib/modules.old");
+package_extract_dir("modules", "/system/lib/modules");
+set_perm_recursive(0, 0, 0755, 0644, "/system/lib/modules");
+set_perm(0, 0, 0755, "/system/lib/modules");
+
+
+ui_print(" you can now reboot.. if it gets stuck..  ");
+ui_print("restore backup.. "); 
+
