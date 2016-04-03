@@ -5,21 +5,26 @@ set -eu -o pipefail
 # Requires bootimgtools, mkbootfs and p7zip in path
 # Should be in kernel_dir/build
 # Exec from kernel_dir
-# TODO: default zip is debug unless -r <version> is specified
+# TODO: implement default zip as debug unless -r <version> is specified
 
 [[ ${1-} == '--debug' ]] && set -x && shift
 
 # config
 # FIXME: config should probably be in a seperate file
-USE_ARCHIVED_RAMDISK=0
-ZIP_TYPE='normal'
+ZIP_TYPE='liverepack'
 ZIP_OUT_STR='kernel-mint2g-cm11-highly-exp-'
 
 BOOTIMG_KERNEL='arch/arm/boot/Image'
-BOOTIMG_RAMDISK_DIR='build/ramdisk/mint2g_ramdisk'
-BOOTIMG_RAMDISK_ARCHIVE='build/ramdisk/ramdisk.cpio.gz'
 
-# canned values for
+BOOTIMG_NORMAL_RAMDISK_DIR='build/ramdisk/mint2g_ramdisk'
+
+# @array : "api_level|ramdisk_dir"
+BOOTIMG_LIVEREPACK_RAMDISKS_DIRS=( '19|build/ramdisk/mint2g_ramdisk'
+'17|build/ramdisk/ramdisks_legacy/cm10.1s'
+'16|build/ramdisk/ramdisks_legacy/stock' )
+
+
+# @array : index canned values for
 # 0->cmdline, 1->base, 2->pagesize
 # TODO: Use something for parsing
 BOOTIMG_ARGS=(
@@ -58,42 +63,44 @@ fi;
 setup_workspace() {
 tmp_dir="$(mktemp -d )"
 mkdir "$tmp_dir/boot"
-mkdir "$tmp_dir/boot/genramdisk"
 mkdir "$tmp_dir/modules"
 }
 
 
 generate_ramdisk() {
-if [[ ${USE_ARCHIVED_RAMDISK-} == 1 ]];then
-BOOTIMG_RAMDISK="$BOOTIMG_RAMDISK_ARCHIVE"
+# generate_ramdisk <src-dir> <out-path>
 
-else
-echo "Generating ramdisk... " 
-tar -cpC "./$BOOTIMG_RAMDISK_DIR" \
+local out_name
+out_name="$(basename "$2")"
+gend_suff="${out_name#ramdisk}"
+gend_suff="${gend_suff%.cpio.gz*}"
+
+local gen_dir="$tmp_dir/boot/genramdisk${gend_suff-}"
+mkdir "$gen_dir"
+
+echo "Generating ramdisk: $out_name ... " 
+tar -cpC "./$1" \
 '--exclude=.git' '--exclude=.gendirs' './' \
-| tar -xpC "$tmp_dir/boot/genramdisk"
+| tar -xpC "$gen_dir"
 
 while IFS='' read -r line || [[ -n "$line" ]]; do
-[[ ! -d "$tmp_dir/boot/genramdisk/${line}" ]] && mkdir "$tmp_dir/boot/genramdisk/${line}"
-done < "$BOOTIMG_RAMDISK_DIR/.gendirs"
+[[ ! -d "$gen_dir/${line}" ]] && mkdir "$gen_dir/${line}"
+done < "$1/.gendirs"
 
-BOOTIMG_RAMDISK="$tmp_dir/boot/ramdisk.cpio.gz"
-
-mkbootfs "$tmp_dir/boot/genramdisk" | gzip  > "$BOOTIMG_RAMDISK"
-
-fi
+mkbootfs "$gen_dir" | gzip  > "$2"
 }
 
 
-make_boot_img() {
+make_bootimg_with_ramdisk() {
+# make_bootimg <ramdisk> <out>
 echo "Preparing boot image"
      mkbootimg \
      --kernel "$BOOTIMG_KERNEL" \
-     --ramdisk "$BOOTIMG_RAMDISK" \
+     --ramdisk "$1" \
      --cmdline "${BOOTIMG_ARGS[0]}" \
      --base "${BOOTIMG_ARGS[1]}" \
      --pagesize "${BOOTIMG_ARGS[2]}" \
-     -o "$tmp_dir/boot/boot.img"
+     -o "$1"
 }
 
 
@@ -113,12 +120,23 @@ find "$tmp_dir/modules" -type f -exec \
 "${CROSS_COMPILE-}objcopy" --strip-unneeded '{}' ';'
 }
 
-save_zip() {
+save_zip_to_out() {
+if [[ ! -e $tmp_dir/$ZIP_OUT_FILE ]]; then
+echo "FATAL: zip creation failed"
+exit 4;
+fi
 cp "$tmp_dir/$ZIP_OUT_FILE" build/out
 }
 
-prepare_zip_autobackup() {
 
+## main
+ZIP_OUT_FILE="${ZIP_OUT_STR}-${packaged_date}.zip"
+setup_workspace
+
+case $ZIP_TYPE in
+
+'autobackup')
+# FIXME: broken will fix later
 echo "Preparing autobackup flashable zip"
   mkdir "$tmp_dir/compressed_data"
 
@@ -131,38 +149,41 @@ echo "Preparing autobackup flashable zip"
   mv "$tmp_dir/data.7z" "$tmp_dir/join4zip"
 
   ( cd "$tmp_dir/join4zip" &&  7z a "../$ZIP_OUT_FILE"  ./* )
-}
 
-prepare_zip_normal() {
-
-echo "Preparing normal  flashable zip"
-  build/zip_normal/join4zip.py "$tmp_dir/join4zip"
-
-  mv  "$tmp_dir/boot/boot.img" "$tmp_dir/join4zip/boot.img"
-  mv  "$tmp_dir/modules" "$tmp_dir/join4zip/modules"
-
-  ( cd "$tmp_dir/join4zip" &&  7z a "../$ZIP_OUT_FILE"  ./* )
-}
-
-ZIP_OUT_FILE="${ZIP_OUT_STR}-${packaged_date}.zip"
-
-setup_workspace
-
-case $ZIP_TYPE in
-
-'autobackup')
-generate_ramdisk
-make_boot_img
-prepare_modules
-prepare_zip_autobackup
 ;;
 
-'normal')
-generate_ramdisk
-make_boot_img
+'normal') 
+BOOTIMG_NORMAL_RAMDISK="$tmp_dir/boot/ramdisk.cpio.gz"
+generate_ramdisk "$BOOTIMG_NORMAL_RAMDISK_DIR"  "$BOOTIMG_NORMAL_RAMDISK"
+make_bootimg_with_ramdisk "$BOOTIMG_NORMAL_RAMDISK" "$tmp_dir/boot/boot.img"
 prepare_modules
-prepare_zip_normal
+
+# FIXME: change join4zip.py to preparezip.py for handling zip creation 
+echo "Preparing normal  flashable zip"
+  build/zip_normal/join4zip.py "$tmp_dir/join4zip"
+  mv  "$tmp_dir/boot/boot.img" "$tmp_dir/join4zip/boot.img"
+  mv  "$tmp_dir/modules" "$tmp_dir/join4zip/modules"
+  ( cd "$tmp_dir/join4zip" &&  7z a "../$ZIP_OUT_FILE"  ./* )
+;;
+
+'liverepack')
+
+for rd_str in "${BOOTIMG_LIVEREPACK_RAMDISKS_DIRS[@]}"  ; do
+rd_api=${rd_str%|*}
+rd_dir=${rd_str#*|}
+generate_ramdisk "$rd_dir" "$tmp_dir/boot/ramdisk-${rd_api}.cpio.gz" 
+done
+
+prepare_modules
+echo "Preparing normal  flashable zip"
+ build/zip_liverepack/join4zip.py "$tmp_dir/join4zip" 
+mkdir -p "$tmp_dir/join4zip/files/ramdisks"
+find "$tmp_dir/boot" -name "*.cpio.gz" -exec mv '{}'  "$tmp_dir/join4zip/files/ramdisks" ';'
+cp "$BOOTIMG_KERNEL" "$tmp_dir/join4zip/files/kernel"
+mv  "$tmp_dir/modules" "$tmp_dir/join4zip/" 
+( cd "$tmp_dir/join4zip" &&  7z a "../$ZIP_OUT_FILE"  ./* )
 ;;
 esac
 
-save_zip
+# copy the zip file to disk from tempdir
+save_zip_to_out
