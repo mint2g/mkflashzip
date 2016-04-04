@@ -13,11 +13,15 @@ BLK_KERNEL='/dev/block/mmcblk0p5'
 XTRCT_DIR='/tmp/xtracted'
 WORK_DIR='/tmp/liverepack'
 
-# busybox
-bbox() {
-/tmp/utils/busybox "$@"
+# log trap
+copylog_on_pre_exit() {
+SD_PATH="/data/media/0"
+ui_print "copying log to $SD_PATH/liverepack.log"
+rm "$SD_PATH/liverepack.log"
+cp "/tmp/liverepack.log" "$SD_PATH/liverepack.log"
 }
 
+trap copylog_on_pre_exit EXIT
 
 # ui_print
 OUTFD=$(\
@@ -49,7 +53,7 @@ system_mount_check_rom() {
 # mount system and see rom is installed.
 if [ ! -e /system/build.prop ]; then
 # screw old recoveries
-bbox mount "$BLK_SYSTEM" /system
+/tmp/busybox mount "$BLK_SYSTEM" /system
 fi;
 if [ ! -e /system/build.prop ]; then
 ui_print "You should install a rom first flashing this kernel."
@@ -59,29 +63,29 @@ fi;
 
 getAndroidSDKVersion() {
 # parse from build.prop
-echo "$(bbox grep ro.build.version.sdk /system/build.prop | bbox awk -F '=' '{print $2}' )"
+/tmp/busybox grep ro.build.version.sdk /system/build.prop | /tmp/busybox awk -F '=' '{print $2}'
 }
 
 setup_workspace() {
-bbox rm -rf "$WORK_DIR"
-bbox mkdir "$WORK_DIR"
+/tmp/busybox rm -rf "$WORK_DIR"
+/tmp/busybox mkdir "$WORK_DIR"
 if [ ! -d "$XTRCT_DIR" ]; then
 ui_print  "FATAL: Nothing to repack"
 exit 8
 fi
-bbox cp "$XTRCT_DIR/kernel" "$WORK_DIR/kernel"
+/tmp/busybox cp "$XTRCT_DIR/kernel" "$WORK_DIR/kernel"
 api="$(getAndroidSDKVersion)"
 rdisk="${XTRCT_DIR}/ramdisks/ramdisk-${api}.cpio.gz"
 if [ ! -e "$rdisk" ]; then
 ui_print "Unsupported ROM."
 exit
 fi
-bbox  cp "$rdisk" "$WORK_DIR/ramdisk.cpio.gz"
+/tmp/busybox  cp "$rdisk" "$WORK_DIR/ramdisk.cpio.gz"
 }
 
 repack_bootimg() {
 # hard coded
-/tmp/utils/mkbootimg --base 0 --pagesize 2048 --kernel_offset 0x00008000 --ramdisk_offset 0x01000000 --second_offset 0x00f00000 --tags_offset 0x00000100 --cmdline 'crappy samsung bootloader' --kernel "$WORK_DIR/kernel" --ramdisk "$WORK_DIR/ramdisk.cpio.gz" -o "$WORK_DIR/boot.img" 
+/tmp/mkbootimg --base 0 --pagesize 2048 --kernel_offset 0x00008000 --ramdisk_offset 0x01000000 --second_offset 0x00f00000 --tags_offset 0x00000100 --cmdline 'crappy samsung bootloader' --kernel "$WORK_DIR/kernel" --ramdisk "$WORK_DIR/ramdisk.cpio.gz" -o "$WORK_DIR/boot.img" 
 if [ ! -e "$WORK_DIR/boot.img" ]; then
 ui_print "FATAL: couldnt pack boot.img" 
 exit 5
@@ -98,25 +102,30 @@ call_postflash() {
 }
 
 flash_kernel() {
+/tmp/busybox true
 # raw write for now
-# bbox dd if="$WORK_DIR/boot.img" of="$BLK_KERNEL"
+/tmp/busybox dd if="$WORK_DIR/boot.img" of="$BLK_KERNEL"
+echo "raw_write: ret=$?"
 }
 
 
 cleanup() {
+/tmp/busybox true
 # 
 # umount /system
-# bbox rm -rf "$WORK_DIR"
-# bbox rm -rf "$XTRCT_DIR"
+# /tmp/busybox rm -rf "$WORK_DIR"
+# /tmp/busybox rm -rf "$XTRCT_DIR"
 }
 
  
 system_mount_check_rom
 setup_workspace
 repack_bootimg
-call_preflash
+#call_preflash
 flash_kernel
-call_postflash
+#call_postflash
 cleanup
 
- 
+# uncomment for testing
+# exit 11
+
