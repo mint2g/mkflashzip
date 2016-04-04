@@ -21,7 +21,7 @@ BOOTIMG_NORMAL_RAMDISK_DIR='build/ramdisk/mint2g_ramdisk'
 # @array : "api_level|ramdisk_dir"
 BOOTIMG_LIVEREPACK_RAMDISKS_DIRS=( '19|build/ramdisk/mint2g_ramdisk'
 '17|build/ramdisk/ramdisks_legacy/cm10.1s'
-'16|build/ramdisk/ramdisks_legacy/stock' )
+'16|build/ramdisk/ramdisks_legacy/stocknew' )
 
 
 # @array : index canned values for
