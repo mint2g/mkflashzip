@@ -9,31 +9,15 @@ set -eu -o pipefail
 
 [[ ${1-} == '--debug' ]] && set -x && shift
 
-# config
-# FIXME: config should probably be in a seperate file
-ZIP_TYPE='liverepack'
-ZIP_OUT_STR='kernel-mint2g-cm11-highly-exp-'
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+SCRITPT_CONFIG="$SCRIPT_DIR/config.prepzip"
 
-BOOTIMG_KERNEL='arch/arm/boot/Image'
+if [[ ! -f "$SCRITPT_CONFIG" ]]; then
+echo "No config file found exiting"
+exit -1
+fi;
 
-BOOTIMG_NORMAL_RAMDISK_DIR='build/ramdisk/mint2g_ramdisk'
-
-# @array : "api_level|ramdisk_dir"
-BOOTIMG_LIVEREPACK_RAMDISKS_DIRS=( '19|build/ramdisk/mint2g_ramdisk'
-'17|build/ramdisk/ramdisks_legacy/cm10.1s'
-'16|build/ramdisk/ramdisks_legacy/stocknew' )
-
-
-# @array : index canned values for
-# 0->cmdline, 1->base, 2->pagesize
-# TODO: Use something for parsing
-BOOTIMG_ARGS=(
-  'crappy samsung bootloader'
-  '0x00000000'
-  '2048'
-)
-
-#end config
+. "$SCRITPT_CONFIG"
 
 
 
@@ -62,6 +46,7 @@ fi;
 
 setup_workspace() {
 tmp_dir="$(mktemp -d )"
+echo "Build started in $tmp_dir"
 mkdir "$tmp_dir/boot"
 mkdir "$tmp_dir/modules"
 }
@@ -100,7 +85,7 @@ echo "Preparing boot image"
      --cmdline "${BOOTIMG_ARGS[0]}" \
      --base "${BOOTIMG_ARGS[1]}" \
      --pagesize "${BOOTIMG_ARGS[2]}" \
-     -o "$1"
+     -o "$2"
 }
 
 
@@ -125,7 +110,7 @@ if [[ ! -e $tmp_dir/$ZIP_OUT_FILE ]]; then
 echo "FATAL: zip creation failed"
 exit 4;
 fi
-cp "$tmp_dir/$ZIP_OUT_FILE" build/out
+cp "$tmp_dir/$ZIP_OUT_FILE" "build/out/$ZIP_OUT_FILE"
 }
 
 
@@ -153,8 +138,12 @@ echo "Preparing autobackup flashable zip"
 ;;
 
 'normal') 
-BOOTIMG_NORMAL_RAMDISK="$tmp_dir/boot/ramdisk.cpio.gz"
-generate_ramdisk "$BOOTIMG_NORMAL_RAMDISK_DIR"  "$BOOTIMG_NORMAL_RAMDISK"
+if [[ -z "$BOOTIMG_NORMAL_PREBUILT_RAMDISK" ]]; then
+  BOOTIMG_NORMAL_RAMDISK="$tmp_dir/boot/ramdisk.cpio.gz"
+  generate_ramdisk "$BOOTIMG_NORMAL_RAMDISK_DIR"  "$BOOTIMG_NORMAL_RAMDISK"
+else 
+  BOOTIMG_NORMAL_RAMDISK="$BOOTIMG_NORMAL_PREBUILT_RAMDISK"
+fi
 make_bootimg_with_ramdisk "$BOOTIMG_NORMAL_RAMDISK" "$tmp_dir/boot/boot.img"
 prepare_modules
 

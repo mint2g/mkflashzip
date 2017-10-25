@@ -1,0 +1,29 @@
+# config
+
+# @string <normal|liverepack>
+ZIP_TYPE='normal'
+ZIP_OUT_STR='kernel-mint2g-lineage-test'
+
+BOOTIMG_KERNEL='arch/arm/boot/Image'
+BOOTIMG_NORMAL_PREBUILT_RAMDISK='/home/cswl/android/nougat/out/target/product/mint2g/ramdisk.img'
+#BOOTIMG_NORMAL_RAMDISK_DIR='build/ramdisk/cm-141_ramdisk'
+
+# @array : "api_level|ramdisk_dir"
+BOOTIMG_LIVEREPACK_RAMDISKS_DIRS=( 
+'19|build/ramdisk/mint2g_ramdisk'
+'17|build/ramdisk/ramdisks_legacy/cm10.1s'
+'16|build/ramdisk/ramdisks_legacy/stocknew' )
+
+
+# @array : index canned values for
+# 0->cmdline, 1->base, 2->pagesize
+# TODO: Use something for parsing
+BOOTIMG_ARGS=(
+  'crappy samsung bootloader'
+  '0x00000000'
+  '2048'
+)
+
+# Path to bootimg tools, if not in PATH
+export PATH=/home/cswl/android/nougat/out/host/linux-x86/bin:$PATH
+export CROSS_COMPILE=/home/shared/toolchains/gcc-linaro-5.4.1-2017.05-x86_64_arm-eabi/bin/arm-eabi-
